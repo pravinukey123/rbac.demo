@@ -1,0 +1,120 @@
+
+kubectl create ns development
+
+vim mypod.yml
+apiversion: v1
+kind: pod
+metadata:
+    name: mypod
+    labels:
+	env: prod
+spec:
+  containers:
+     - name: myfirstcontainer
+       image: nginx:latest
+
+kubectl apply -f mypod.yml
+
+useradd -m developer
+
+cd /home/developer
+
+openssl genrsa -out developer.key 2048   #it will create private key
+
+openssl req -new -key developer.key -out developer.csr -subj "/CN=developer"  #it will create developer.csr
+
+opnessl x509 -req -in developer.csr -CA /etc/Kubernetes/pki/ca.crt -CAkey /etc/Kubernetes/pki/ca.key -CAcreateserial -out developer.crt -days 365       #it wil create developer.crt
+
+
+cat ~/.kube/config | grep https   # you will get ip eg (server https:192.168.11.51:6443)
+
+
+kubectl --kubeconfig deveopler.kubeconfig config set-cluster Kubernetes --server https:192.168.11.51:6443 --certificate-authority=etc/Kubernetes/pki.ca.crt      #It will create kubeconfig file for developer developer.kubeconfig
+
+
+cat developer.kubeconfig
+
+
+kubectl --kubeconfig developer.kubeconfig config set-credentials developer --client-certificate developer.crt --client.key developer.key   #user looks set verify with cat developer.kubeconfig
+
+kubectl --kubeconfig developer.kubeconfig config set-context developer-Kubernetes --cluster Kubernetes --namespace development --user developer  
+
+
+now cat developer.kubeconfig     you can see the the context namespace: development
+but need set manually for current-context   like current-context: "developer-Kubernetes"
+
+
+
+you can see 4 files now.
+1. developer.key
+2. developer.csr
+3. developer.crt
+4. developer.kubeconfig
+
+Now change the permission for developer like below
+
+chown developer:developer developer.*
+
+
+
+Now create role & role binding
+
+
+vim role.yml
+
+apiversion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+   namespace: development
+   name: pod-reader
+rules:
+- apiGroups: [""] # It indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "watch", "create", "list", "delete"]
+
+
+
+
+vim rolebinding.yml
+
+apiversion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+   name: read-pods
+   namespace: development
+subjects:
+- kind: User
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+   kind: Role
+   name: pod-reader
+   apiGroup: rbac.authorization.k8s.io
+
+
+
+
+kubectl get role -n development
+kubectl get rolebinding -n development
+kubectl --kubeconfig developer.kubeconfig get pods
+
+
+vim pod1.yml
+
+apiVersion: V1
+kind: Pod
+metadata:
+   name: Pod1
+   namespace: development
+spec:
+   containers: 
+   - name: myfirstcontainer
+     image: nginx:latest
+
+
+
+kubectl --kubeconfig developer.kubeconfig apply -f pod1.yml
+
+
+
+
